@@ -1,4 +1,5 @@
 import { useState } from 'react';
+
 import {
   StyleSheet,
   Text,
@@ -10,6 +11,7 @@ import {
   ActivityIndicator,
   Pressable,
 } from 'react-native';
+
 import { Link } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -22,45 +24,74 @@ export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
 
   const [fullName, setFullName] = useState('');
+
   const [role, setRole] =
     useState<'student' | 'teacher'>('student');
+
   const [email, setEmail] = useState('');
+
   const [password, setPassword] = useState('');
+
   const [confirmPassword, setConfirmPassword] =
     useState('');
 
   const [error, setError] =
     useState<string | null>(null);
 
-  const [success, setSuccess] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] =
+    useState(false);
+
+  const [loading, setLoading] =
+    useState(false);
+
+  /*
+   * Clean email is available to the entire component.
+   * This fixes the "Cannot find name 'cleanEmail'" error.
+   */
+  const cleanEmail =
+    email.trim().toLowerCase();
 
   const handleRegister = async () => {
+    if (loading) {
+      return;
+    }
+
     setError(null);
+    setSuccess(false);
 
     const cleanName = fullName.trim();
-    const cleanEmail = email.trim().toLowerCase();
 
+    /*
+     * Validate required fields.
+     */
     if (
       !cleanName ||
       !cleanEmail ||
       !password ||
       !confirmPassword
     ) {
-      setError('All fields are required.');
+      setError(
+        'Please fill in all fields.'
+      );
       return;
     }
 
-    if (!cleanEmail.includes('@')) {
-      setError('Please enter a valid email address.');
+    /*
+     * Basic email validation.
+     */
+    if (
+      !cleanEmail.includes('@') ||
+      !cleanEmail.includes('.')
+    ) {
+      setError(
+        'Please enter a valid email address.'
+      );
       return;
     }
 
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.');
-      return;
-    }
-
+    /*
+     * Password validation.
+     */
     if (password.length < 6) {
       setError(
         'Password must be at least 6 characters.'
@@ -68,10 +99,23 @@ export default function RegisterScreen() {
       return;
     }
 
+    /*
+     * Confirm password.
+     */
+    if (password !== confirmPassword) {
+      setError(
+        'Passwords do not match.'
+      );
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const { data, error: authError } = await signUp(
+      const {
+        data,
+        error: authError,
+      } = await signUp(
         cleanEmail,
         password,
         {
@@ -80,28 +124,55 @@ export default function RegisterScreen() {
         }
       );
 
+      /*
+       * Supabase returned an error.
+       */
       if (authError) {
-        setError(authError.message);
+        const message =
+          authError.message?.toLowerCase() ?? '';
+
+        if (
+          message.includes(
+            'user already registered'
+          )
+        ) {
+          setError(
+            'This email is already registered. Please sign in instead.'
+          );
+        } else if (
+          message.includes('rate limit') ||
+          message.includes(
+            'email rate limit'
+          )
+        ) {
+          setError(
+            'Too many confirmation emails have been sent. Please wait and try again later.'
+          );
+        } else {
+          setError(
+            authError.message ||
+              'Unable to create your account.'
+          );
+        }
+
         return;
       }
 
       /*
-       * When email confirmation is enabled,
-       * Supabase normally returns no session.
+       * If Supabase returned a session immediately,
+       * email confirmation is disabled.
+       *
+       * If there is no session, confirmation is enabled
+       * and the user needs to check their email.
        */
-      if (!data.session) {
+      if (data.session) {
         setSuccess(true);
-        return;
+      } else {
+        setSuccess(true);
       }
-
-      /*
-       * If email confirmation is disabled,
-       * the user is logged in immediately.
-       */
-      setSuccess(true);
     } catch (err) {
       console.error(
-        'Registration error:',
+        '[REGISTER] Registration error:',
         err
       );
 
@@ -117,7 +188,9 @@ export default function RegisterScreen() {
     <View
       style={[
         styles.container,
-        { paddingTop: insets.top },
+        {
+          paddingTop: insets.top,
+        },
       ]}
     >
       <KeyboardAvoidingView
@@ -125,23 +198,31 @@ export default function RegisterScreen() {
         behavior={
           Platform.OS === 'ios'
             ? 'padding'
-            : 'height'
+            : Platform.OS === 'android'
+            ? 'height'
+            : undefined
         }
         keyboardVerticalOffset={
-          Platform.OS === 'ios' ? 0 : 20
+          Platform.OS === 'ios'
+            ? 0
+            : 20
         }
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={
+            styles.scrollContent
+          }
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={
             Platform.OS === 'ios'
               ? 'interactive'
-              : 'none'
+              : 'on-drag'
           }
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.headerContainer}>
+          <View
+            style={styles.headerContainer}
+          >
             <Header title="QR Attendance" />
           </View>
 
@@ -150,24 +231,43 @@ export default function RegisterScreen() {
           </Text>
 
           <Text style={styles.subtitle}>
-            Register to start recording attendance
+            Register to start recording
+            attendance
           </Text>
 
           {success ? (
-            <View style={styles.successContainer}>
-              <Text style={styles.successTitle}>
+            /*
+             * ============================
+             * EMAIL CONFIRMATION MESSAGE
+             * ============================
+             */
+            <View
+              style={
+                styles.successContainer
+              }
+            >
+              <Text
+                style={
+                  styles.successTitle
+                }
+              >
                 Check your email!
               </Text>
 
-              <Text style={styles.successText}>
-                We sent a confirmation link to{' '}
-                {email.trim().toLowerCase()}.
+              <Text
+                style={
+                  styles.successText
+                }
+              >
+                We sent a confirmation link
+                to {cleanEmail}.
                 {'\n\n'}
-                Click the link in the email to verify
-                your account.
+                Open the email and tap the
+                confirmation link.
                 {'\n\n'}
-                After verification, return to QR
-                Attendance and sign in.
+                The link will open the QR
+                Attendance app and complete
+                your verification.
               </Text>
 
               <Link
@@ -178,9 +278,12 @@ export default function RegisterScreen() {
               </Link>
             </View>
           ) : (
+            /*
+             * ============================
+             * REGISTRATION FORM
+             * ============================
+             */
             <View style={styles.form}>
-              {/* FULL NAME */}
-
               <Text style={styles.label}>
                 Full Name
               </Text>
@@ -198,8 +301,6 @@ export default function RegisterScreen() {
                 editable={!loading}
                 returnKeyType="next"
               />
-
-              {/* ROLE */}
 
               <Text style={styles.label}>
                 I am a...
@@ -251,8 +352,6 @@ export default function RegisterScreen() {
                 </Pressable>
               </View>
 
-              {/* EMAIL */}
-
               <Text style={styles.label}>
                 Email
               </Text>
@@ -268,12 +367,10 @@ export default function RegisterScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="email-address"
-                autoComplete="email"
+                textContentType="emailAddress"
                 editable={!loading}
                 returnKeyType="next"
               />
-
-              {/* PASSWORD */}
 
               <Text style={styles.label}>
                 Password
@@ -287,14 +384,13 @@ export default function RegisterScreen() {
                 placeholderTextColor={
                   COLORS.textSecondary
                 }
-                secureTextEntry
                 autoCapitalize="none"
                 autoCorrect={false}
+                secureTextEntry
+                textContentType="newPassword"
                 editable={!loading}
                 returnKeyType="next"
               />
-
-              {/* CONFIRM PASSWORD */}
 
               <Text style={styles.label}>
                 Confirm Password
@@ -303,14 +399,17 @@ export default function RegisterScreen() {
               <TextInput
                 style={styles.input}
                 value={confirmPassword}
-                onChangeText={setConfirmPassword}
+                onChangeText={
+                  setConfirmPassword
+                }
                 placeholder="Re-enter your password"
                 placeholderTextColor={
                   COLORS.textSecondary
                 }
-                secureTextEntry
                 autoCapitalize="none"
                 autoCorrect={false}
+                secureTextEntry
+                textContentType="newPassword"
                 editable={!loading}
                 returnKeyType="done"
                 onSubmitEditing={
@@ -318,15 +417,11 @@ export default function RegisterScreen() {
                 }
               />
 
-              {/* ERROR */}
-
               {error && (
                 <Text style={styles.error}>
                   {error}
                 </Text>
               )}
-
-              {/* BUTTON */}
 
               {loading ? (
                 <ActivityIndicator
@@ -438,7 +533,8 @@ const styles = StyleSheet.create({
 
   roleChipActive: {
     borderColor: COLORS.primary,
-    backgroundColor: COLORS.primary + '14',
+    backgroundColor:
+      COLORS.primary + '14',
   },
 
   roleChipText: {
