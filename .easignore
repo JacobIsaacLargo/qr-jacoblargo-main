@@ -1,0 +1,32 @@
+
+# dependencies
+node_modules/
+
+# expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# native
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# macOS
+.DS_Store
+
+# local env files
+<h1 class="title">local env files</h1>
+.env
+.env*.local
+
+# teaching materials
+docs/
+
+# Generate native project fresh on EAS
+/android
+/ios
