@@ -17,7 +17,7 @@ let globalSession: Session | null = null;
 let globalUser: User | null = null;
 let globalLoading = false;
 
-let listeners: Set<() => void> = new Set();
+const listeners: Set<() => void> = new Set();
 
 function notify() {
   listeners.forEach((listener) => listener());
@@ -65,25 +65,53 @@ export async function signUp(
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
+
+    options: {
+      emailRedirectTo: 'qr-attendance://',
+
+      data: profile
+        ? {
+            full_name: profile.full_name,
+            role: profile.role,
+          }
+        : undefined,
+    },
   });
 
-  if (!error && data.session && profile) {
-    // The Phase 3 trigger creates the profile row on signup.
-    // Fill in the full_name and role the student chose.
-    await supabase
+  if (error) {
+    return {
+      data,
+      error,
+    };
+  }
+
+  // If email confirmation is disabled,
+  // Supabase may immediately provide a session.
+  if (data.session && profile) {
+    const { error: profileError } = await supabase
       .from('profiles')
       .update({
         full_name: profile.full_name,
         role: profile.role,
       })
       .eq('id', data.session.user.id);
+
+    if (profileError) {
+      console.error(
+        'Profile update error:',
+        profileError.message
+      );
+    }
   }
 
-  if (!error && data.session) {
+  if (data.session) {
     setAuth(data.session);
   }
 
-  return { data, error };
+  return {
+    data,
+    error: null,
+  };
 }
 
 export async function signIn(
@@ -100,7 +128,10 @@ export async function signIn(
     setAuth(data.session);
   }
 
-  return { data, error };
+  return {
+    data,
+    error,
+  };
 }
 
 export async function signOut() {
@@ -108,5 +139,7 @@ export async function signOut() {
 
   supabase.auth.signOut().catch(() => {});
 
-  return { error: null };
+  return {
+    error: null,
+  };
 }
