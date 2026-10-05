@@ -1,15 +1,12 @@
 import { useEffect } from 'react';
-
 import {
   ActivityIndicator,
   StyleSheet,
   View,
 } from 'react-native';
-
 import { Stack } from 'expo-router';
 
 import { COLORS } from '@/constants/colors';
-
 import {
   initializeAuth,
   useAuth,
@@ -21,36 +18,20 @@ export default function RootLayout() {
     loading,
   } = useAuth();
 
-  /*
-   * Start Supabase authentication once
-   * when the root layout mounts.
-   *
-   * This restores:
-   * - saved login sessions
-   * - email confirmation sessions
-   * - authentication changes
-   */
   useEffect(() => {
     void initializeAuth();
   }, []);
 
-  /*
-   * Don't decide whether the user is logged
-   * in until Supabase has finished restoring
-   * the saved session.
-   */
   if (loading) {
     return (
       <View
-        style={styles.loadingContainer}
+        style={
+          styles.loadingContainer
+        }
       >
         <ActivityIndicator
           size="large"
           color={COLORS.primary}
-        />
-
-        <View
-          style={styles.loadingSpacer}
         />
       </View>
     );
@@ -62,9 +43,6 @@ export default function RootLayout() {
         headerShown: false,
       }}
     >
-      {/*
-       * Logged-out screens.
-       */}
       <Stack.Protected
         guard={!session}
       >
@@ -77,9 +55,6 @@ export default function RootLayout() {
         />
       </Stack.Protected>
 
-      {/*
-       * Logged-in screens.
-       */}
       <Stack.Protected
         guard={!!session}
       >
@@ -98,13 +73,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor:
       COLORS.background,
-  },
-
-  /*
-   * Gives the spinner some breathing room
-   * without adding another text dependency.
-   */
-  loadingSpacer: {
-    height: 12,
   },
 });

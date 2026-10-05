@@ -1,9 +1,10 @@
 import { useSyncExternalStore } from 'react';
-import { supabase } from './supabase';
 import type {
   Session,
   User,
 } from '@supabase/supabase-js';
+
+import { supabase } from './supabase';
 
 type AuthState = {
   session: Session | null;
@@ -16,9 +17,11 @@ export type SignUpProfile = {
   role: 'student' | 'teacher';
 };
 
-let globalSession: Session | null = null;
-let globalUser: User | null = null;
-let globalLoading = true;
+let authState: AuthState = {
+  session: null,
+  user: null,
+  loading: true,
+};
 
 const listeners = new Set<() => void>();
 
@@ -42,16 +45,19 @@ function subscribe(listener: () => void) {
   };
 }
 
-function getSnapshot() {
-  return globalSession;
+function getSnapshot(): AuthState {
+  return authState;
 }
 
-function setGlobalAuth(
-  session: Session | null
+function updateAuthState(
+  session: Session | null,
+  loading = false
 ) {
-  globalSession = session;
-  globalUser = session?.user ?? null;
-  globalLoading = false;
+  authState = {
+    session,
+    user: session?.user ?? null,
+    loading,
+  };
 
   notify();
 }
@@ -59,7 +65,7 @@ function setGlobalAuth(
 export function setAuth(
   session: Session | null
 ) {
-  setGlobalAuth(session);
+  updateAuthState(session, false);
 }
 
 export async function initializeAuth() {
@@ -68,9 +74,27 @@ export async function initializeAuth() {
   }
 
   initialized = true;
-  globalLoading = true;
+
+  authState = {
+    ...authState,
+    loading: true,
+  };
 
   notify();
+
+  if (!authSubscription) {
+    const {
+      data: {
+        subscription,
+      },
+    } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        updateAuthState(session, false);
+      }
+    );
+
+    authSubscription = subscription;
+  }
 
   try {
     const {
@@ -84,31 +108,21 @@ export async function initializeAuth() {
         error.message
       );
 
-      setGlobalAuth(null);
-    } else {
-      setGlobalAuth(data.session);
+      updateAuthState(null, false);
+      return;
     }
+
+    updateAuthState(
+      data.session ?? null,
+      false
+    );
   } catch (error) {
     console.warn(
       '[AUTH] Session initialization failed:',
       error
     );
 
-    setGlobalAuth(null);
-  }
-
-  if (!authSubscription) {
-    const {
-      data: {
-        subscription,
-      },
-    } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setGlobalAuth(session);
-      }
-    );
-
-    authSubscription = subscription;
+    updateAuthState(null, false);
   }
 }
 
@@ -117,20 +131,22 @@ export function cleanupAuth() {
 
   authSubscription = null;
   initialized = false;
+
+  authState = {
+    session: null,
+    user: null,
+    loading: true,
+  };
+
+  notify();
 }
 
 export function useAuth(): AuthState {
-  const session = useSyncExternalStore(
+  return useSyncExternalStore(
     subscribe,
     getSnapshot,
     getSnapshot
   );
-
-  return {
-    session,
-    user: session?.user ?? globalUser,
-    loading: globalLoading,
-  };
 }
 
 export async function signUp(
@@ -147,11 +163,11 @@ export async function signUp(
   } = await supabase.auth.signUp({
     email: normalizedEmail,
     password,
-
     options: {
       data: profile
         ? {
-            full_name: profile.full_name,
+            full_name:
+              profile.full_name.trim(),
             role: profile.role,
           }
         : undefined,
@@ -165,40 +181,11 @@ export async function signUp(
     };
   }
 
-  /*
-   * Email confirmation is disabled
-   * in Supabase.
-   */
   if (data.session) {
-    setGlobalAuth(data.session);
-  }
-
-  /*
-   * Update the profile with the
-   * information entered during signup.
-   */
-  if (data.session && profile) {
-    const {
-      error: profileError,
-    } = await supabase
-      .from('profiles')
-      .update({
-        full_name: profile.full_name,
-        role: profile.role,
-        updated_at:
-          new Date().toISOString(),
-      })
-      .eq(
-        'id',
-        data.session.user.id
-      );
-
-    if (profileError) {
-      console.warn(
-        '[AUTH] Profile update failed:',
-        profileError.message
-      );
-    }
+    updateAuthState(
+      data.session,
+      false
+    );
   }
 
   return {
@@ -227,7 +214,10 @@ export async function signIn(
     !error &&
     data.session
   ) {
-    setGlobalAuth(data.session);
+    updateAuthState(
+      data.session,
+      false
+    );
   }
 
   return {
@@ -241,7 +231,10 @@ export async function signOut() {
     error,
   } = await supabase.auth.signOut();
 
-  setGlobalAuth(null);
+  updateAuthState(
+    null,
+    false
+  );
 
   return {
     error,
